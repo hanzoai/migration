@@ -31,8 +31,16 @@ status:
       what: "all-SQLite done at code level for cloud/iam/base, NOT executed in GitOps"
       root: "shared `sql` StatefulSet (PG18) + insights-sql + ~20 DATABASE_URL consumers still run; ZERO universe Jobs invoke the existing pg2sqlite tools"
     - id: contract-gaps
-      what: "FE→BE tenancy + route gaps"
-      root: "X-Project-Id vs X-IAM-Project-Id mismatch (project scopes 0 calls); X-Environment has 0 BE readers; 6 FE modules lack BE routes; /zap live on BE with FE client deleted"
+      what: "FE→BE route gaps (header mismatch RESOLVED)"
+      root: >-
+        RESOLVED: the X-IAM-* → canonical header sweep is done — org/project/env/
+        user all read one convention (X-Org-Id/X-Project-Id/X-Environment/
+        X-User-Id, no IAM prefix) across evalsvc + the ai monolith (~200 /v1
+        routes) + CORS; FE drops the dead X-IAM-Org-Id. Zero X-IAM-* readers
+        remain. STILL OPEN: 6 FE modules lack BE routes (rank 6); X-Environment
+        has no storage dimension yet (rank 9); project/env not JWT-minted so a
+        direct-to-pod caller could spoof once services scope on them (rank 10);
+        /zap live on BE with FE client deleted (rank 12)."
 
 # ── MIGRATION MATRIX ─────────────────────────────────────────────────────────
 # destination: BE=migrate into cloud binary · FE=migrate into console2 · SQLITE=
