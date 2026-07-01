@@ -13,9 +13,27 @@
 target:
   binary: ghcr.io/hanzoai/cloud                 # the one artifact
   embed: "webui.go //go:embed all:webui/dist"   # console2 SPA embedded, mounted LAST (API + /zap win)
-  storage: sqlite                               # per-tenant SQLite via hanzoai/base; NO internal Postgres
+  storage: sqlite-on-s3                          # SQLite files NATIVE on the S3-native object store
   origin: api.cloud.hanzo.ai                    # one origin serves SPA + /v1
   services: 1                                   # collapse the 2-Service estate (console2 SSR + cloud-api)
+  rpc: zap-native                               # ZAP RPC plane (zapface / clients/rpc.go) as the native transport
+
+# ── STORAGE ARCHITECTURE (confirmed): full SQLite, files native on S3 ─────────
+# NOT local RWO PVC (the current single-writer model). Per-tenant SQLite .db
+# files live on the S3-NATIVE optimized object store (hanzoai/s3 = SeaweedFS,
+# deployed: s3 + s3-filer + s3-master) with WAL streaming replication via base's
+# plugins/replicate + hanzoai/vfs (content-addressed, PQ-encrypted block store —
+# HIP-0107 streaming replication). This is the console-sqlite.yaml pattern (Base
+# app.db + SeaweedFS/replicate WAL, needs vfs 0.2.0) applied to EVERY service:
+# durable + horizontally recoverable without Postgres, the .db is the source and
+# S3 is the replicated backplane. ZAP-native inter-subsystem RPC (clients/rpc.go).
+storage_architecture:
+  primitive: "per-tenant SQLite (hanzoai/base)"
+  backplane: "hanzoai/s3 (SeaweedFS: s3/s3-filer/s3-master) — S3-native optimized object store"
+  replication: "base plugins/replicate WAL streaming + hanzoai/vfs (HIP-0107, PQ-encrypted content-addressed blocks)"
+  rpc: "ZAP-native (zapface /zap + clients/rpc.go inter-subsystem transport)"
+  status: todo
+  note: "mechanism exists (vfs 360057d + base replicate + SeaweedFS live + console-sqlite.yaml precedent); wiring cloud/base off local PVC onto S3-backed vfs replication is the next major storage phase — staged per service, high blast, after the pg2sqlite cutover."
 
 status:
   percent_complete: 40
