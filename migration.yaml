@@ -107,6 +107,20 @@ components:
     destination: COLLAPSE
     status: todo
     note: "after build:embed lands, drop this Service; point console.hanzo.ai/console2.hanzo.ai at cloud-api (one binary, one origin)."
+  - name: "console2 build:embed (rank 4 — the embed blocker)"
+    destination: FE
+    status: todo
+    note: >-
+      SCOPED: the cloud Dockerfile ALREADY auto-detects `npm run build:embed` →
+      out/ → webui/dist (Dockerfile:46-50), so the whole fix is console2-side. 16
+      app/**/route.ts handlers block `output: export` — but ALL are same-origin
+      [...path] PROXIES (ai, admin/iam, admin/kms, paas, cloud, org/iam, vm,
+      tasksd, training, billing, superbase, keys, waitlist, docs, onboard,
+      topup/wallet). In the unified binary they COLLAPSE: the SPA is served from
+      the same origin as cloud /v1, which mints identity from the session cookie
+      (middleware_identity SanitizeIdentity) — the server-side token injection
+      moves BE-side. Fix = collapse the 16 proxies to same-origin /v1 calls, add
+      output:export + a build:embed script. L/high-blast — dedicated effort."
 
   # --- BE routes the FE already probes but no service owns ---
   - name: "/v1 facades: functions, memory, bot, s3, datastore, docdb"
