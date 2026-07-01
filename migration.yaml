@@ -210,7 +210,7 @@ execution:
   - {rank: 3,  area: storage,  blast: low,    status: done,        task: "EXPORT — DONE: 34/34 DBs (~931MB gz) on ~/Desktop/hanzo-pg-export, ALL pass gzip -t. kms (884MB) needed the robust chunked md5-verified path (scripts/pg-fetch-db.sh) after intermittent kube-exec stream drops; 33 others via streaming pg-export.sh. The verified backup — precondition for any flip/shutdown — is satisfied."}
   - {rank: 4,  area: FE,       blast: high,   task: "Add build:embed static target to console2 (migrate 15 route.ts handlers → same-origin /v1)"}
   - {rank: 5,  area: storage,  blast: high,   task: "Author + run per-service pg2sqlite Jobs in universe GitOps with -verify gating"}
-  - {rank: 6,  area: BE,       blast: low,    task: "Register /v1 facades: functions, memory, bot, s3, datastore, docdb"}
+  - {rank: 6,  area: BE,       blast: low,    status: in_progress, task: "Register /v1 facades the FE probes. DONE: /v1/prompts (cloud 35a6d26 — promptsvc order 144 proxies console Langfuse /api/public/v2/prompts; verified: binary boots 'prompts surface mounted', /v1/prompts routes to promptsvc not 404, /v1/prompts/health 200). REMAINING: functions, memory (ai monolith memory ctrl), bot, s3/datastore/docdb (provisioning kinds). Goes live on next cloud image deploy (console-keys secret already wired via evalsvc)."}
   - {rank: 7,  area: infra,    blast: medium, task: "Bump cloud-api CR off 1.785.24 to the green embed image; confirm ArgoCD reconciles"}
   - {rank: 8,  area: storage,  blast: high,   task: "KMS SQLite migration w/ at-rest encryption parity, then flip off `sql`"}
   - {rank: 9,  area: BE,       blast: medium, task: "Decide X-Environment: wire mainnet/testnet/devnet into tenancy OR remove the FE switcher"}
