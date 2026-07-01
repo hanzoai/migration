@@ -69,7 +69,14 @@ components:
   - name: "shared `sql` StatefulSet (PG18, ns hanzo)"
     destination: KILL
     status: todo
-    note: "INTERNAL store for kms + legacy hanzo_cloud. Decommission AFTER all consumers flipped + KMS migrated. CAUTION: also backs the managed-Postgres product — carve that out first (see keep list)."
+    note: >-
+      INTERNAL store, VERIFIED ~40 DBs / ~2.5GB on sql-0 (user hanzo): hanzo_cloud
+      1154MB, kms 884MB, auto 130MB, iam 72MB, insights 27MB, then sign/analytics/
+      paas/kms_zoo/kms_lux/kms_pars/commerce/console/temporal*/social/agents/
+      dataroom/captable/zen/bootnode/flow/dsp_ui/hanzo_vm/rag_vectordb/adnexus/
+      hanzo/tasks*/bothub (all <25MB). Decommission AFTER all consumers flipped +
+      KMS migrated. CAUTION: also backs the managed-Postgres product — carve that
+      out first (see keep list). PVC is Retain.
   - name: insights-sql (Postgres)
     destination: KILL
     status: todo
@@ -176,9 +183,9 @@ postgres_decommission:
 
 # ── EXECUTION ORDER (impact ÷ blast-radius; rank 1 first) ─────────────────────
 execution:
-  - {rank: 1,  area: BE,       blast: low,    task: "Fix cloud main build (9d47757 fails go build ./cmd/cloud) — unblocks every downstream"}
-  - {rank: 2,  area: contract, blast: low,    task: "Fix project-scope header: make X-Project-Id the BE reader (eval + scoped svcs); drop dead X-IAM-Org-Id FE stamp"}
-  - {rank: 3,  area: storage,  blast: low,    task: "EXPORT: full pg_dump of PRIMARY + KMS + insights before any migration"}
+  - {rank: 1,  area: BE,       blast: low,    status: done,        task: "Fix cloud main build — RESOLVED by go.sum fix e8b9fca; verified: build green + 7 webui embed tests PASS"}
+  - {rank: 2,  area: contract, blast: low,    status: done,        task: "Project-scope header — DONE: cloud bde698f (eval reads canonical X-Project-Id) + console2 d5e94b9 (drop dead X-IAM-Org-Id; X-Org-Id confirmed the one org header GetEffectiveOrg reads)"}
+  - {rank: 3,  area: storage,  blast: low,    status: in_progress, task: "EXPORT: full pg_dump of all ~40 internal DBs on sql-0 (~2.5GB; hanzo_cloud 1.1GB + kms 884MB) → ~/Desktop/hanzo-pg-export via scripts/pg-export.sh"}
   - {rank: 4,  area: FE,       blast: high,   task: "Add build:embed static target to console2 (migrate 15 route.ts handlers → same-origin /v1)"}
   - {rank: 5,  area: storage,  blast: high,   task: "Author + run per-service pg2sqlite Jobs in universe GitOps with -verify gating"}
   - {rank: 6,  area: BE,       blast: low,    task: "Register /v1 facades: functions, memory, bot, s3, datastore, docdb"}
