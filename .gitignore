@@ -1,0 +1,8 @@
+# Data dumps NEVER belong in git — exports land on the operator desktop.
+*.sql
+*.dump
+*.sqlite
+*.db
+*.tar.gz
+.DS_Store
+node_modules/

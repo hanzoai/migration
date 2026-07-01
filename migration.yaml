@@ -1,0 +1,198 @@
+# Hanzo V8 "Open Cloud" — migration & decommission chart (SINGLE SOURCE OF TRUTH).
+#
+# Target end-state: ONE unified Go binary (ghcr.io/hanzoai/cloud) that go:embeds
+# the console2 SPA, every capability migrated to the FE (console2) or the BE
+# (cloud), ALL-SQLite (no internal Postgres), collapsed to ONE Service / ONE
+# origin, all live in production.
+#
+# Sourced from assessment wf_bcf82f7c-b54 (7-mapper CTO swarm). Snapshot: ~40% —
+# the mechanism is real and the backend is live; the unification, the FE-route
+# migration, and the Postgres shutdown are still ahead. LLM.md is the narrative;
+# this file is the machine-readable matrix that runbooks + tooling read.
+
+target:
+  binary: ghcr.io/hanzoai/cloud                 # the one artifact
+  embed: "webui.go //go:embed all:webui/dist"   # console2 SPA embedded, mounted LAST (API + /zap win)
+  storage: sqlite                               # per-tenant SQLite via hanzoai/base; NO internal Postgres
+  origin: api.cloud.hanzo.ai                    # one origin serves SPA + /v1
+  services: 1                                   # collapse the 2-Service estate (console2 SSR + cloud-api)
+
+status:
+  percent_complete: 40
+  live: "api.cloud.hanzo.ai/v1/health -> {status: ok} (server: zip, SQLite-backed)"
+  load_bearing_gaps:
+    - id: embed-is-shell
+      what: "webui/dist is a 3.5KB hand-written fallback, NOT the real console2 SPA"
+      root: "console2 is Next SSR with 15 app/**/route.ts server handlers (KMS tokens); no output:export, no build:embed → Docker console stage ships the shell every build"
+    - id: cloud-main-red
+      what: "commit 9d47757 fails `CGO_ENABLED=0 go build ./cmd/cloud` (exit 1)"
+      root: "no shippable image from tip; last green = embed commit 5600e6e; CR pinned pre-embed 1.785.24"
+    - id: sqlite-not-executed
+      what: "all-SQLite done at code level for cloud/iam/base, NOT executed in GitOps"
+      root: "shared `sql` StatefulSet (PG18) + insights-sql + ~20 DATABASE_URL consumers still run; ZERO universe Jobs invoke the existing pg2sqlite tools"
+    - id: contract-gaps
+      what: "FE→BE tenancy + route gaps"
+      root: "X-Project-Id vs X-IAM-Project-Id mismatch (project scopes 0 calls); X-Environment has 0 BE readers; 6 FE modules lack BE routes; /zap live on BE with FE client deleted"
+
+# ── MIGRATION MATRIX ─────────────────────────────────────────────────────────
+# destination: BE=migrate into cloud binary · FE=migrate into console2 · SQLITE=
+# flip storage · KILL=decommission · KEEP=stays (product/out-of-scope) · COLLAPSE=
+# fold Service into the one binary. status: done · partial · todo.
+components:
+  # --- the unified core (already real) ---
+  - name: cloud (unified Go binary)
+    destination: BE
+    status: partial
+    note: "live+healthy; mount registry composes ~18 subsystems; SQLite-only w/ storagelock.CheckEnv boot guard. Gap: main tip RED + embed is a shell."
+  - name: console2 (Next.js FE)
+    destination: FE
+    status: partial
+    note: "72 enabled modules (64 *Module.tsx), ~43 wired live. Gap: no build:embed static target → not truly embedded; still a separate SSR Service."
+  - name: go:embed one-binary mechanism
+    destination: BE
+    status: done
+    note: "webui.go embeds webui/dist; serve.go mounts LAST; webui_test.go proves API-precedence/SPA-fallback/404/traversal (4 tests PASS)."
+
+  # --- storage: everything → SQLite; Postgres INTERNAL instances → KILL ---
+  - name: iam storage
+    destination: SQLITE
+    status: done
+    note: "driverName=sqlite + orgIsolation=sqlite (SQLCipher per-org) in manifests; iam/cmd/pg2sqlite -verify complete."
+  - name: base storage
+    destination: SQLITE
+    status: done
+    note: "canonical SQLite default + SQLDialect abstraction + no_pg_driver build tag strips PG to a stub."
+  - name: cloud storage
+    destination: SQLITE
+    status: done
+    note: "no DSN in config.go; hard PG-refusal boot guard; cmd/migrate-pg-to-sqlite ships."
+  - name: "shared `sql` StatefulSet (PG18, ns hanzo)"
+    destination: KILL
+    status: todo
+    note: "INTERNAL store for kms + legacy hanzo_cloud. Decommission AFTER all consumers flipped + KMS migrated. CAUTION: also backs the managed-Postgres product — carve that out first (see keep list)."
+  - name: insights-sql (Postgres)
+    destination: KILL
+    status: todo
+    note: "migrate relational metadata → SQLite; OLAP stays ClickHouse (does not map to SQLite)."
+  - name: kms storage (on `sql` Postgres)
+    destination: SQLITE
+    status: todo
+    note: "security-critical: NO SQLite tool yet; must match at-rest encryption parity of the current envelope before flipping. Last blocker on `sql`."
+  - name: "~20 DATABASE_URL services"
+    destination: SQLITE
+    status: todo
+    note: "adnexus, analytics, bootnode, bot, captable, console+worker, dataroom, flow, gateway, insights, jobs, kms, mpc, o11y, paas, sign, social, tasks, temporal, zen — flip per service after -verify."
+
+  # --- FE migration: legacy console + external surfaces → into console2 ---
+  - name: old console (ghcr.io/hanzoai/console)
+    destination: KILL
+    status: todo
+    note: "4 replicas + console-worker 3.156.7 still deployed; retire after remaining pages port into console2 (task #35)."
+  - name: 7 external product surfaces
+    destination: FE
+    status: todo
+    note: "gateway/api.hanzo.ai, mpc.hanzo.ai, registry/ghcr, metrics/insights.hanzo.ai, crawl.hanzo.ai, studio.hanzo.ai, self-referential console → migrate native. 7 docs.hanzo.ai deep-links stay as doc pointers."
+  - name: ML Pipelines module
+    destination: FE
+    status: todo
+    note: "the single honest 'soon' → ComingSoon; build it for 'everything enabled'."
+  - name: console2 Next SSR Service
+    destination: COLLAPSE
+    status: todo
+    note: "after build:embed lands, drop this Service; point console.hanzo.ai/console2.hanzo.ai at cloud-api (one binary, one origin)."
+
+  # --- BE routes the FE already probes but no service owns ---
+  - name: "/v1 facades: functions, memory, bot, s3, datastore, docdb"
+    destination: BE
+    status: todo
+    note: "6 FE modules render honest-empty until cloud binds these routes."
+  - name: project/environment sub-scope
+    destination: BE
+    status: todo
+    note: "every svc resolves tenant=org only; make project a real sub-scope in provisioning/ml/plan/pricing/admin + casibase store/provider/chat. Decide X-Environment (wire tenancy or drop switcher)."
+  - name: ai casibase/beego monolith (~200 /v1 routes)
+    destination: BE
+    status: partial
+    note: "'migrated to BE' currently = 'still inside the legacy monolith'; decompose into orthogonal svcs over time (lowest urgency)."
+
+  # --- contract: ZAP plane decision ---
+  - name: ZAP RPC plane (/zap + zapface + @zap-proto)
+    destination: KILL
+    status: todo
+    note: "BE plane live + tested but FE client deleted (7cf8015) → no consumer. Decide: restore src/lib/zap OR delete plane + orphaned @zap-proto deps + vestigial :9653. Default: REST is canonical."
+
+# ── KEEP — explicitly OUT of the Postgres shutdown (customer-facing product) ──
+# The all-SQLite decision is about INTERNAL storage. The managed-Postgres PRODUCT
+# that customers provision is NOT internal storage and MUST survive.
+keep_postgres_product:
+  - name: cloud provisioner pgx offering (CLOUD_SQL_ADMIN_DSN → sql.hanzo.svc)
+    reason: "customer-facing 'provision a Postgres' product; out of scope for shutdown."
+  - name: Neon `cloud-sql` (neondb)
+    reason: "managed-Postgres product backend; not internal storage."
+  - warning: "the `sql` StatefulSet is BOTH internal store AND product backend — resolve on paper BEFORE any scale-to-0. Killing it blind breaks paying customers."
+
+# ── POSTGRES DECOMMISSION RUNBOOK (ordered: EXPORT first, SHUTDOWN last) ──────
+postgres_decommission:
+  - step: 1
+    name: inventory-and-freeze
+    risk: safe
+    detail: "enumerate live consumers (`sql` StatefulSet, insights-sql, the ~20 DATABASE_URL services); confirm no forgotten standalone hanzo-postgres holds data."
+  - step: 2
+    name: carve-out-product
+    risk: safe
+    detail: "declare the pgx provisioner offering + Neon cloud-sql as PRODUCT, OUT of scope; resolve the `sql` dual-role on paper."
+  - step: 3
+    name: export
+    risk: safe
+    detail: "full pg_dump of every logical DB BEFORE touching anything (PRIMARY_DB_URL + KMS_DB_URL gzip+AES-256 + insights). Reach via `kubectl -n hanzo exec sql-0 -- pg_dump` (creds: Secret postgres-credentials, user hanzo). Retain dumps off-cluster (operator desktop)."
+  - step: 4
+    name: convert-and-verify
+    risk: caution
+    detail: "per service run the repo tool with -verify (row-count parity, type coercion): iam/cmd/pg2sqlite, cloud migrate-pg-to-sqlite, ai/cmd/pg2sqlite. Scrub PG-only hazards (timestamptz/bytea/jsonb/text[]). Do NOT flip yet."
+  - step: 5
+    name: gitops-jobs
+    risk: caution
+    detail: "author + run per-service migration Jobs in universe with -verify GATING before any flip (currently ZERO exist — the reproducibility blocker)."
+  - step: 6
+    name: kms-sqlite-parity
+    risk: caution
+    detail: "build KMS SQLite migration with at-rest encryption parity (security-critical, extra review); it is the last PG blocker on `sql`."
+  - step: 7
+    name: insights-split
+    risk: caution
+    detail: "insights metadata → SQLite; leave OLAP on ClickHouse. Same for rag/analytics datastore kinds."
+  - step: 8
+    name: console-blue-green
+    risk: caution
+    detail: "console-sqlite.yaml exists (Base app.db + ClickHouse + SeaweedFS/replicate WAL, needs vfs 0.2.0); flip Service selector to console-variant=sqlite, scale old to 0, keep PG recoverable."
+  - step: 9
+    name: flip-services
+    risk: caution
+    detail: "per service set driverName=sqlite / remove DATABASE_URL ONLY after its -verify passed. base additionally built no_pg_driver so no deploy can select PG. Reversible until dumps discarded."
+  - step: 10
+    name: shutdown
+    risk: destructive
+    detail: "ONLY after ALL internal consumers flipped+verified AND KMS migrated: scale `sql` + insights-sql to 0, then delete. PVCs are Retain (do-block-storage) → volume survives; keep Retain'd PVC + off-cluster dumps as the recovery point before reclaiming storage."
+
+# ── EXECUTION ORDER (impact ÷ blast-radius; rank 1 first) ─────────────────────
+execution:
+  - {rank: 1,  area: BE,       blast: low,    task: "Fix cloud main build (9d47757 fails go build ./cmd/cloud) — unblocks every downstream"}
+  - {rank: 2,  area: contract, blast: low,    task: "Fix project-scope header: make X-Project-Id the BE reader (eval + scoped svcs); drop dead X-IAM-Org-Id FE stamp"}
+  - {rank: 3,  area: storage,  blast: low,    task: "EXPORT: full pg_dump of PRIMARY + KMS + insights before any migration"}
+  - {rank: 4,  area: FE,       blast: high,   task: "Add build:embed static target to console2 (migrate 15 route.ts handlers → same-origin /v1)"}
+  - {rank: 5,  area: storage,  blast: high,   task: "Author + run per-service pg2sqlite Jobs in universe GitOps with -verify gating"}
+  - {rank: 6,  area: BE,       blast: low,    task: "Register /v1 facades: functions, memory, bot, s3, datastore, docdb"}
+  - {rank: 7,  area: infra,    blast: medium, task: "Bump cloud-api CR off 1.785.24 to the green embed image; confirm ArgoCD reconciles"}
+  - {rank: 8,  area: storage,  blast: high,   task: "KMS SQLite migration w/ at-rest encryption parity, then flip off `sql`"}
+  - {rank: 9,  area: BE,       blast: medium, task: "Decide X-Environment: wire mainnet/testnet/devnet into tenancy OR remove the FE switcher"}
+  - {rank: 10, area: BE,       blast: medium, task: "Sanitize/mint X-Project-Id/X-Environment from JWT before any svc trusts them"}
+  - {rank: 11, area: infra,    blast: high,   task: "Collapse prod to ONE Service: drop console2 SSR, point console.hanzo.ai at cloud-api (after embed)"}
+  - {rank: 12, area: contract, blast: medium, task: "Decide ZAP-vs-REST; restore src/lib/zap OR delete zapface+/zap+:9653+orphaned @zap-proto"}
+  - {rank: 13, area: storage,  blast: high,   task: "Flip each migrated svc to SQLite (after -verify); build base no_pg_driver"}
+  - {rank: 14, area: BE,       blast: low,    task: "Resolve billing seam (/v1/billing/balance+usage owner: commerce vs ai monolith)"}
+  - {rank: 15, area: infra,    blast: low,    task: "404/redirect /v1 on marketing cloud.hanzo.ai; register VFS in image; remove :9653"}
+  - {rank: 16, area: infra,    blast: high,   task: "Expose the 19 /paas infra inventories on platform.hanzo.ai (only apps+cluster today)"}
+  - {rank: 17, area: infra,    blast: low,    task: "Unblock iam CI (ARC-queued CI/CD + build.yml 0s failure)"}
+  - {rank: 18, area: storage,  blast: high,   task: "SHUTDOWN: decommission `sql` + insights-sql after all consumers flipped (keep Retain PVC + dumps)"}
+  - {rank: 19, area: FE,       blast: medium, task: "Build ML Pipelines; migrate 7 external surfaces native; port remaining old-console pages"}
+  - {rank: 20, area: BE,       blast: high,   task: "Wire ZAP inter-subsystem RPC (clients/rpc.go stubs) or doc co-resident-only; decompose ai monolith"}
