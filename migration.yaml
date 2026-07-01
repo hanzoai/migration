@@ -198,7 +198,7 @@ postgres_decommission:
 # ── EXECUTION ORDER (impact ÷ blast-radius; rank 1 first) ─────────────────────
 execution:
   - {rank: 1,  area: BE,       blast: low,    status: done,        task: "Fix cloud main build — RESOLVED by go.sum fix e8b9fca; verified: build green + 7 webui embed tests PASS"}
-  - {rank: 2,  area: contract, blast: low,    status: done,        task: "Project-scope header — DONE: cloud bde698f (eval reads canonical X-Project-Id) + console2 d5e94b9 (drop dead X-IAM-Org-Id; X-Org-Id confirmed the one org header GetEffectiveOrg reads)"}
+  - {rank: 2,  area: contract, blast: low,    status: done,        task: "Project-scope header — DONE end-to-end: cloud evalsvc bde698f + console2 FE d5e94b9 (drop dead X-IAM-Org-Id) + ai monolith 7aab19aa (tenant filter + GetRequestTenantProjectID + CORS all read canonical X-Project-Id/X-Environment across ~200 /v1 routes) + cloud ai-bump d783a24. Was: X-IAM-Project-Id/X-IAM-Env never sent → project+env scoping silently empty. X-Org-Id confirmed the one org header (GetEffectiveOrg)."}
   - {rank: 3,  area: storage,  blast: low,    status: in_progress, task: "EXPORT: full pg_dump of all ~40 internal DBs on sql-0 (~2.5GB; hanzo_cloud 1.1GB + kms 884MB) → ~/Desktop/hanzo-pg-export via scripts/pg-export.sh"}
   - {rank: 4,  area: FE,       blast: high,   task: "Add build:embed static target to console2 (migrate 15 route.ts handlers → same-origin /v1)"}
   - {rank: 5,  area: storage,  blast: high,   task: "Author + run per-service pg2sqlite Jobs in universe GitOps with -verify gating"}
