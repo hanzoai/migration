@@ -1,5 +1,7 @@
 # hanzoai/migration
 
+[![Open in Hanzo](https://hanzo.app/badges/open-in-hanzo.svg)](https://hanzo.app/dev/open?repo=github.com/hanzoai/migration&ref=main&action=open) [![Edit with Hanzo](https://hanzo.app/badges/edit-with-hanzo.svg)](https://hanzo.app/dev/open?repo=github.com/hanzoai/migration&ref=main&action=edit)
+
 Migration & decommission plan of record for **Hanzo V8 "Open Cloud"** — one
 unified Go binary (`ghcr.io/hanzoai/cloud`) that `go:embed`s the console2 SPA,
 every capability in the FE (console2) or BE (cloud), **all-SQLite** (no internal
